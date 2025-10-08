@@ -1,0 +1,513 @@
+import streamlit as st
+import os
+import time
+from pathlib import Path
+from typing import List, Dict
+import json
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema import HumanMessage, SystemMessage
+import tkinter as tk
+from tkinter import filedialog
+
+# ==============================================
+# File System Helper Functions
+# ==============================================
+
+def select_folder():
+    """Open a folder selection dialog and return the selected path"""
+    root = tk.Tk()
+    root.withdraw()  # Hide the main window
+    root.wm_attributes('-topmost', 1)  # Bring to front
+    folder_path = filedialog.askdirectory(
+        title="Select Repository Folder",
+        master=root
+    )
+    root.destroy()
+    return folder_path
+
+
+# ==============================================
+# LLM Integration Module (Simple LangChain Function)
+# ==============================================
+
+def generate_documentation_with_llm(repo_context: Dict) -> str:
+    """
+    Generate documentation from repository context using Google Gemini via LangChain.
+    
+    Args:
+        repo_context: Dictionary containing file contents and structure
+        
+    Returns:
+        Generated documentation as markdown string
+    """
+    try:
+        # Initialize Google Generative AI
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-pro",
+            google_api_key="AIzaSyCSzZCOhfoLIPJbKK3l6ENNKNMDAlMYxjE",
+            temperature=0.3,
+            max_output_tokens=8000
+        )
+        
+        # Prepare file summary with content
+        files_summary = []
+        for idx, file_info in enumerate(repo_context['files'][:20]):  # Limit to 20 files
+            summary = f"""
+File {idx + 1}: {file_info['path']}
+- Extension: {file_info['extension']}
+- Size: {file_info['size']} bytes
+- Lines: {file_info['lines']}
+- Content Preview:
+```
+{file_info['content'][:1000]}
+```
+"""
+            files_summary.append(summary)
+        
+        # Create prompt template
+        prompt_template = ChatPromptTemplate.from_messages([
+            ("system", """You are an expert technical documentation writer. Your task is to analyze code repositories 
+            and create comprehensive, well-structured documentation in Markdown format.
+            
+            Generate documentation that includes:
+            1. Project Overview - Brief description of what the project does
+            2. Architecture - High-level architecture and design patterns used
+            3. Project Structure - Explanation of directory organization
+            4. Key Components - Detailed description of main modules/files
+            5. Technologies Used - Programming languages, frameworks, libraries
+            6. Setup Instructions - How to install and run the project
+            7. API/Function Documentation - Key functions and their purposes
+            8. Dependencies - External dependencies and their purposes
+            9. Code Quality Notes - Design patterns, best practices observed
+            
+            Make it professional, clear, and easy to understand."""),
+            ("human", """Analyze this repository and generate comprehensive documentation:
+
+Repository Name: {repo_name}
+Total Files: {total_files}
+Total Size: {total_size} bytes
+
+Project Structure:
+{structure}
+
+File Details:
+{files_summary}
+
+Generate detailed documentation in Markdown format.""")
+        ])
+        
+        # Create the prompt
+        messages = prompt_template.format_messages(
+            repo_name=repo_context['repo_name'],
+            total_files=repo_context['total_files'],
+            total_size=repo_context['total_size'],
+            structure=repo_context['structure'][:2000],  # Limit structure size
+            files_summary="\n".join(files_summary)
+        )
+        
+        # Call LLM
+        response = llm.invoke(messages)
+        
+        return response.content
+        
+    except Exception as e:
+        return f"""# Documentation Generation Error
+
+An error occurred while generating documentation: {str(e)}
+
+## Repository Information
+- **Name**: {repo_context['repo_name']}
+- **Total Files**: {repo_context['total_files']}
+- **Total Size**: {repo_context['total_size']} bytes
+
+```
+
+Please check your API key and try again.
+"""
+
+
+# ==============================================
+# Repository Processing Functions
+# ==============================================
+
+def get_directory_structure(path: Path, prefix: str = "", max_depth: int = 4, current_depth: int = 0) -> str:
+    """Generate a tree-like structure of the directory"""
+    if current_depth >= max_depth:
+        return ""
+    
+    structure = ""
+    try:
+        items = sorted(path.iterdir(), key=lambda x: (not x.is_dir(), x.name))
+        for i, item in enumerate(items):
+            if item.name.startswith('.'):
+                continue
+                
+            is_last = i == len(items) - 1
+            current_prefix = "└── " if is_last else "├── "
+            structure += f"{prefix}{current_prefix}{item.name}\n"
+            
+            if item.is_dir() and current_depth < max_depth - 1:
+                next_prefix = prefix + ("    " if is_last else "│   ")
+                structure += get_directory_structure(item, next_prefix, max_depth, current_depth + 1)
+    except PermissionError:
+        pass
+    
+    return structure
+
+
+def should_process_file(file_path: Path) -> bool:
+    """Determine if a file should be processed"""
+    # Skip binary and unwanted files
+    skip_extensions = {'.pyc', '.pyo', '.exe', '.dll', '.so', '.dylib', 
+                       '.jpg', '.jpeg', '.png', '.gif', '.pdf', '.zip', 
+                       '.tar', '.gz', '.mp4', '.mp3', '.wav'}
+    
+    skip_dirs = {'node_modules', '__pycache__', '.git', 'venv', 'env', 
+                 '.venv', 'dist', 'build', '.idea', '.vscode'}
+    
+    # Check if any parent directory should be skipped
+    if any(parent.name in skip_dirs for parent in file_path.parents):
+        return False
+    
+    if file_path.suffix.lower() in skip_extensions:
+        return False
+    
+    return True
+
+
+def read_file_content(file_path: Path) -> str:
+    """Safely read file content"""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except UnicodeDecodeError:
+        try:
+            with open(file_path, 'r', encoding='latin-1') as f:
+                return f.read()
+        except:
+            return "[Binary or unreadable file]"
+    except Exception as e:
+        return f"[Error reading file: {str(e)}]"
+
+
+def process_repository(repo_path: str, progress_callback=None) -> Dict:
+    """Process repository and extract relevant information"""
+    repo_path = Path(repo_path)
+    files_info = []
+    total_size = 0
+    
+    # Get all processable files
+    all_files = []
+    for file_path in repo_path.rglob('*'):
+        if file_path.is_file() and should_process_file(file_path):
+            all_files.append(file_path)
+    
+    total_files = len(all_files)
+    
+    # Process files
+    for idx, file_path in enumerate(all_files):
+        if progress_callback:
+            progress_callback(idx + 1, total_files)
+        
+        try:
+            stat = file_path.stat()
+            content = read_file_content(file_path)
+            
+            files_info.append({
+                'path': str(file_path.relative_to(repo_path)),
+                'extension': file_path.suffix,
+                'size': stat.st_size,
+                'lines': len(content.splitlines()),
+                'content': content[:5000]  # Limit content size for LLM
+            })
+            total_size += stat.st_size
+        except Exception as e:
+            continue
+    
+    # Generate structure
+    structure = get_directory_structure(repo_path)
+    
+    return {
+        'files': files_info,
+        'structure': structure,
+        'total_files': total_files,
+        'total_size': total_size,
+        'repo_name': repo_path.name
+    }
+
+
+# ==============================================
+# Streamlit UI
+# ==============================================
+
+def init_session_state():
+    """Initialize session state variables"""
+    if 'repo_path' not in st.session_state:
+        st.session_state.repo_path = None
+    if 'documentation' not in st.session_state:
+        st.session_state.documentation = None
+    if 'processing' not in st.session_state:
+        st.session_state.processing = False
+    if 'repo_context' not in st.session_state:
+        st.session_state.repo_context = None
+
+
+def main():
+    # Page configuration
+    st.set_page_config(
+        page_title="Repository Documentation Generator",
+        page_icon="📚",
+        layout="wide",
+        initial_sidebar_state="collapsed"
+    )
+    
+    # Custom CSS for enterprise look
+    st.markdown("""
+        <style>
+        .main {
+            background-color: #f8f9fa;
+        }
+        .stButton>button {
+            width: 100%;
+            background-color: #0066cc;
+            color: white;
+            font-weight: 600;
+            border-radius: 8px;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            transition: all 0.3s ease;
+        }
+        .stButton>button:hover {
+            background-color: #0052a3;
+            box-shadow: 0 4px 12px rgba(0,102,204,0.3);
+        }
+        .header-container {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 2rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .header-title {
+            color: white;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin: 0;
+        }
+        .header-subtitle {
+            color: rgba(255,255,255,0.9);
+            font-size: 1.1rem;
+            margin-top: 0.5rem;
+        }
+        .info-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            margin-bottom: 1rem;
+        }
+        .metric-container {
+            background: white;
+            padding: 1.2rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #667eea;
+        }
+        .metric-label {
+            color: #6c757d;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+        div[data-testid="stMarkdownContainer"] pre {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    init_session_state()
+    
+    # Header
+    st.markdown("""
+        <div class="header-container">
+            <h1 class="header-title">📚 Repository Documentation Generator</h1>
+            <p class="header-subtitle">Automatically generate comprehensive documentation for any code repository using AI</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # Main content area
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.markdown('<div class="info-card">', unsafe_allow_html=True)
+        st.subheader("📂 Select Repository")
+        
+        # Display current path if selected
+        if st.session_state.repo_path:
+            st.info(f"📁 Selected: `{st.session_state.repo_path}`")
+        
+        # Folder selection button
+        if st.button("🔍 Browse & Select Repository Folder", type="primary"):
+            folder_path = select_folder()
+            if folder_path:
+                st.session_state.repo_path = folder_path
+                st.session_state.processing = True
+                st.session_state.documentation = None
+                st.rerun()
+            else:
+                st.warning("⚠️ No folder selected.")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown('<div class="info-card">', unsafe_allow_html=True)
+        st.subheader("ℹ️ How it works")
+        st.markdown("""
+        1. **Select** your repository folder
+        2. **Analyze** - AI scans all files
+        3. **Generate** - Creates documentation
+        4. **Review** - View & export results
+        """)
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Processing section
+    if st.session_state.processing:
+        st.markdown("---")
+        st.markdown('<div class="info-card">', unsafe_allow_html=True)
+        
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        # Process repository
+        status_text.text("🔍 Scanning repository structure...")
+        
+        def update_progress(current, total):
+            progress = current / total
+            progress_bar.progress(progress)
+            status_text.text(f"📄 Processing files... ({current}/{total})")
+        
+        try:
+            repo_context = process_repository(st.session_state.repo_path, update_progress)
+            st.session_state.repo_context = repo_context
+            
+            # Generate documentation
+            status_text.text("🤖 Generating documentation with AI...")
+            progress_bar.progress(100)
+            
+            documentation = generate_documentation_with_llm(repo_context)
+            
+            st.session_state.documentation = documentation
+            st.session_state.processing = False
+            
+            status_text.text("✅ Documentation generated successfully!")
+            time.sleep(1)
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"❌ Error processing repository: {str(e)}")
+            st.session_state.processing = False
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Display results
+    if st.session_state.documentation and st.session_state.repo_context:
+        st.markdown("---")
+        
+        # Metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.markdown(f"""
+                <div class="metric-container">
+                    <div class="metric-value">{st.session_state.repo_context['total_files']}</div>
+                    <div class="metric-label">Files Analyzed</div>
+                </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            size_mb = st.session_state.repo_context['total_size'] / (1024 * 1024)
+            st.markdown(f"""
+                <div class="metric-container">
+                    <div class="metric-value">{size_mb:.2f} MB</div>
+                    <div class="metric-label">Total Size</div>
+                </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(f"""
+                <div class="metric-container">
+                    <div class="metric-value">{len(st.session_state.documentation.splitlines())}</div>
+                    <div class="metric-label">Doc Lines</div>
+                </div>
+            """, unsafe_allow_html=True)
+        
+        with col4:
+            st.markdown(f"""
+                <div class="metric-container">
+                    <div class="metric-value">✓</div>
+                    <div class="metric-label">Complete</div>
+                </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Documentation display
+        st.markdown('<div class="info-card">', unsafe_allow_html=True)
+        st.subheader("📖 Generated Documentation")
+        
+        # Tabs for different views
+        tab1, tab2 = st.tabs(["📄 Documentation", "📊 Repository Info"])
+        
+        with tab1:
+            st.markdown(st.session_state.documentation)
+            
+            # Download button
+            st.download_button(
+                label="⬇️ Download Documentation",
+                data=st.session_state.documentation,
+                file_name=f"{st.session_state.repo_context['repo_name']}_documentation.md",
+                mime="text/markdown"
+            )
+        
+        with tab2:
+            st.subheader("📊 Repository Statistics")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Total Files", st.session_state.repo_context['total_files'])
+                size_mb = st.session_state.repo_context['total_size'] / (1024 * 1024)
+                st.metric("Total Size", f"{size_mb:.2f} MB")
+            
+            with col2:
+                extensions = {}
+                for file_info in st.session_state.repo_context['files']:
+                    ext = file_info['extension'] or 'no extension'
+                    extensions[ext] = extensions.get(ext, 0) + 1
+                
+                st.write("**File Types:**")
+                for ext, count in sorted(extensions.items(), key=lambda x: x[1], reverse=True)[:10]:
+                    st.write(f"- `{ext}`: {count} files")
+            
+            st.subheader("🗂️ Directory Structure")
+            st.code(st.session_state.repo_context['structure'], language='text')
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Reset button
+        if st.button("🔄 Analyze Another Repository"):
+            st.session_state.repo_path = None
+            st.session_state.documentation = None
+            st.session_state.repo_context = None
+            st.rerun()
+
+
+if __name__ == "__main__":
+    main()
