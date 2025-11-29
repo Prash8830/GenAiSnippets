@@ -1,0 +1,31 @@
+#mcp server
+from fastmcp import FastMCP
+
+mcp = FastMCP("My Server")
+
+@mcp.tool
+def process_data(input: str) -> str:
+    """Process data on the server"""
+    return f"Processed: {input}"
+
+if __name__ == "__main__":
+    mcp.run(transport="http", host="0.0.0.0", port=8000)
+
+#mcp client
+from fastmcp import Client
+
+async def main():
+   # Connect to the MCP server (adjust URL as needed)
+   async with Client("http://localhost:8000/mcp") as client:
+       # List available tools on the server
+       tools = await client.list_tools()
+       print(f"Available tools: {tools}")
+    #    Call a tool (example: 'add' tool)
+       result = await client.call_tool("process_data", {"input":"mango"})
+       print(f"Result: {result}")
+
+
+# Run the client
+import asyncio
+
+asyncio.run(main())
