@@ -8,3 +8,16 @@ for method in ("get", "post", "put", "delete", "head", "options", "patch"):
         return _original(*args, **kwargs)
 
     setattr(requests, method, insecure_request)
+
+
+#
+import curl_cffi.requests as creq
+
+# Patch the Session class to always skip SSL verification
+_old_init = creq.Session.__init__
+
+def _new_init(self, *args, **kwargs):
+    kwargs["verify"] = False
+    _old_init(self, *args, **kwargs)
+
+creq.Session.__init__ = _new_init
