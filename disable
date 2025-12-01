@@ -1,0 +1,10 @@
+import requests
+
+for method in ("get", "post", "put", "delete", "head", "options", "patch"):
+    original = getattr(requests, method)
+
+    def insecure_request(*args, _original=original, **kwargs):
+        kwargs["verify"] = False
+        return _original(*args, **kwargs)
+
+    setattr(requests, method, insecure_request)
