@@ -1,0 +1,64 @@
+import yfinance as yf
+import pandas as pd
+import time
+
+indian_tickers = [
+    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS",
+    "HINDUNILVR.NS", "BHARTIARTL.NS", "ITC.NS", "SBIN.NS", "LT.NS"
+]
+
+all_data = []
+
+for ticker_symbol in indian_tickers:
+    try:
+        ticker = yf.Ticker(ticker_symbol)
+        info = ticker.info
+        
+        # Get historical data for last week
+        hist = ticker.history(period="1wk")
+        
+        # Add metadata to each day's data
+        for date, row in hist.iterrows():
+            data_row = {
+                'Date': date,
+                'Ticker': ticker_symbol,
+                'Company': info.get('longName', 'N/A'),
+                'Open': row['Open'],
+                'High': row['High'],
+                'Low': row['Low'],
+                'Close': row['Close'],
+                'Volume': row['Volume'],
+                'Market Cap': info.get('marketCap', 'N/A'),
+                'P/E Ratio': info.get('trailingPE', 'N/A'),
+                'Forward P/E': info.get('forwardPE', 'N/A'),
+                'Price to Book': info.get('priceToBook', 'N/A'),
+                'Book Value': info.get('bookValue', 'N/A'),
+                'ROE (%)': round(info.get('returnOnEquity', 0) * 100, 2) if info.get('returnOnEquity') else 'N/A',
+                'ROA (%)': round(info.get('returnOnAssets', 0) * 100, 2) if info.get('returnOnAssets') else 'N/A',
+                'Profit Margin (%)': round(info.get('profitMargins', 0) * 100, 2) if info.get('profitMargins') else 'N/A',
+                'Debt to Equity': info.get('debtToEquity', 'N/A'),
+                'EPS': info.get('trailingEps', 'N/A'),
+                'Dividend Yield (%)': round(info.get('dividendYield', 0) * 100, 2) if info.get('dividendYield') else 'N/A',
+                '52 Week High': info.get('fiftyTwoWeekHigh', 'N/A'),
+                '52 Week Low': info.get('fiftyTwoWeekLow', 'N/A'),
+                'Beta': info.get('beta', 'N/A'),
+            }
+            all_data.append(data_row)
+        
+        print(f"Fetched data for {ticker_symbol}")
+        time.sleep(2)  # Avoid rate limiting
+        
+    except Exception as e:
+        print(f"Error fetching {ticker_symbol}: {e}")
+
+# Create DataFrame
+df = pd.DataFrame(all_data)
+
+# Display
+print("\n" + "="*100)
+print(df.to_string(index=False))
+print(f"\nTotal rows: {len(df)}")
+
+# Save to CSV
+df.to_csv('indian_stocks_detailed.csv', index=False)
+print("\nData saved to 'indian_stocks_detailed.csv'")
