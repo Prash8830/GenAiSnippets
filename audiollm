@@ -1,0 +1,83 @@
+# from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
+import os
+import httpx
+import warnings
+import ssl
+import urllib3
+from openai import AzureOpenAI
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+
+warnings.filterwarnings('ignore')
+ssl._create_default_https_context = ssl._create_unverified_context
+http_client = httpx.Client(verify=False)
+async_http_client = httpx.AsyncClient(verify=False)
+
+# Disable SSL warnings
+warnings.filterwarnings('ignore')
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Disable SSL verification globally for all contexts
+ssl._create_default_https_context = ssl._create_unverified_context
+
+# # Monkey patch requests to disable SSL verification
+import requests
+original_request = requests.Session.request
+def patched_request(self, *args, **kwargs):
+    kwargs['verify'] = False
+    return original_request(self, *args, **kwargs)
+requests.Session.request = patched_request
+
+os.environ["TIKTOKEN_CACHE_DIR"] = ""
+os.environ["REQUESTS_CA_BUNDLE"] = ""
+os.environ["CURL_CA_BUNDLE"] = ""
+
+# Pre-load tiktoken with SSL disabled
+try:
+    import tiktoken
+    from tiktoken.load import load_tiktoken_bpe
+    import functools
+    
+    # Patch tiktoken's load function to use unverified context
+    original_load = load_tiktoken_bpe
+    @functools.wraps(original_load)
+    def patched_load(*args, **kwargs):
+        import urllib.request
+        old_opener = urllib.request.urlopen
+        def new_opener(url, *args, **kwargs):
+            context = ssl._create_unverified_context()
+            return old_opener(url, *args, context=context, **kwargs)
+        urllib.request.urlopen = new_opener
+        result = original_load(*args, **kwargs)
+        urllib.request.urlopen = old_opener
+        return result
+    tiktoken.load.load_tiktoken_bpe = patched_load
+except Exception as e:
+    print(f"Tiktoken patch warning: {e}")
+
+# Create custom HTTP client with SSL verification disabled
+http_client = httpx.Client(verify=False, timeout=60.0)
+async_http_client = httpx.AsyncClient(verify=False, timeout=60.0)
+
+
+# Setup client
+client = AzureOpenAI(
+    api_key=,
+    api_version=",
+    azure_endpoint",
+    azure_deployment,
+    http_client=http_client,
+    # http_async_client=async_http_client,
+)
+
+with open("voice-sample.wav", "rb") as audio_file:
+    transcription = client.audio.transcriptions.create(
+        model=os.getenv("AZURE_WHISPER_DEPLOYMENT"),
+        file=audio_file
+    )
+
+print("Transcription:", transcription.text)
