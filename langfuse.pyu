@@ -1,0 +1,30 @@
+import os
+os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-83939a49-1a3b-466f-a9c4-71c6578fffba"
+os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-a403acd5-cbc2-4939-9fbd-cfd5a2b1c643"
+os.environ["LANGFUSE_BASE_URL"] = "https://cloud.langfuse.com"
+from langfuse.langchain import CallbackHandler
+ 
+# Initialize Langfuse CallbackHandler for Langchain (tracing)
+langfuse_handler = CallbackHandler()
+from operator import itemgetter
+from langchain_openai import ChatOpenAI
+from langchain_classic.prompts import ChatPromptTemplate
+from langchain_classic.schema import StrOutputParser
+from models import llm
+ 
+langfuse_handler = CallbackHandler()
+ 
+prompt1 = ChatPromptTemplate.from_template("generate complete langgraph code for capital markets")
+prompt2 = ChatPromptTemplate.from_template(
+    "what country is the city {city} in? respond in {language}"
+)
+model = llm
+chain1 = prompt1 | model | StrOutputParser()
+chain2 = (
+    {"city": chain1, "language": itemgetter("language")}
+    | prompt2
+    | model
+    | StrOutputParser()
+)
+ 
+chain2.invoke({"person": "obama", "language": "English"}, config={"callbacks":[langfuse_handler]})
