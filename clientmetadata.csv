@@ -1,11 +1,11 @@
-client_id,client_name,email_id,goal_type,target_amount,horizon_years,risk_appetite,liquidity_need,monthly_investible_amount,income_stability,preferences_no_crypto,preferences_min_gold_percent,preferences_asset_exclusions,existing_equity,existing_debt_fd,existing_gold,existing_real_estate,existing_crypto
-CL001,Prashant Kumar,prashant.kumar@example.com,home_purchase,9000000,4,moderate,medium,55000,stable,true,6,,15,35,5,0,0
-CL002,Vidyu Narayanan,vidyu.narayanan@example.com,retirement,25000000,18,high,low,70000,stable,false,5,,40,10,5,25,0
-CL003,Priya Sahu,priya.sahu@example.com,child_education,6000000,7,moderate,medium,30000,stable,true,8,Real Estate,20,45,10,0,0
-CL004,Arun Dev,arun.dev@example.com,wealth_creation,,10,high,low,85000,stable,false,5,,50,10,5,15,3
-CL005,Vishnu Raj,vishnu.raj@example.com,emergency_fund,1500000,1,low,high,20000,unstable,true,,,0,40,0,0,0
-CL006,Rohan Mehta,rohan.mehta@example.com,retirement,30000000,25,high,low,90000,stable,false,5,,30,30,5,10,2
-CL007,Anjali Sharma,anjali.sharma@example.com,home_purchase,8500000,2,low,high,40000,unstable,true,6,Real Estate,10,25,5,0,0
-CL008,Siddharth Khanna,siddharth.khanna@example.com,wealth_creation,,9,high,medium,120000,stable,false,5,,35,20,5,10,1
-CL009,Neha Kulkarni,neha.kulkarni@example.com,child_education,5000000,6,moderate,medium,35000,stable,true,7,,12,38,8,0,0
-CL010,Rahul Nair,rahul.nair@example.com,emergency_fund,1200000,1.5,low,high,15000,unstable,true,5,Real Estate,0,60,5,0,0
+client_id,client_name,email_id,goal_type,target_amount,horizon_years,risk_appetite,liquidity_need,monthly_investible_amount,income_stability,preferences_no_crypto,preferences_min_gold_percent,preferences_asset_exclusions,existing_equity,existing_debt_fd,existing_gold,existing_real_estate,existing_crypto,goal_duration
+CL001,Prashant Kumar,prashant.kumar@example.com,home_purchase,9000000,4,moderate,medium,55000,stable,true,6,,15,35,5,0,0,10
+CL002,Vidyu Narayanan,vidyu.narayanan@example.com,retirement,25000000,18,high,low,70000,stable,false,5,,40,10,5,25,0,5
+CL003,Priya Sahu,priya.sahu@example.com,child_education,6000000,7,moderate,medium,30000,stable,true,8,Real Estate,20,45,10,0,0,18
+CL004,Arun Dev,arun.dev@example.com,wealth_creation,,10,high,low,85000,stable,false,5,,50,10,5,15,3,8
+CL005,Vishnu Raj,vishnu.raj@example.com,emergency_fund,1500000,1,low,high,20000,unstable,true,,,0,40,0,0,0,2
+CL006,Rohan Mehta,rohan.mehta@example.com,retirement,30000000,25,high,low,90000,stable,false,5,,30,30,5,10,2,3
+CL007,Anjali Sharma,anjali.sharma@example.com,home_purchase,8500000,2,low,high,40000,unstable,true,6,Real Estate,10,25,5,0,0,12
+CL008,Siddharth Khanna,siddharth.khanna@example.com,wealth_creation,,9,high,medium,120000,stable,false,5,,35,20,5,10,1,5
+CL009,Neha Kulkarni,neha.kulkarni@example.com,child_education,5000000,6,moderate,medium,35000,stable,true,7,,12,38,8,0,0,9
+CL010,Rahul Nair,rahul.nair@example.com,emergency_fund,1200000,1.5,low,high,15000,unstable,true,5,Real Estate,0,60,5,0,0,8
